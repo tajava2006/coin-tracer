@@ -3,6 +3,12 @@
 /node_modules
 /build
 
+
+!/config/environment
+/config/environment/*
+!/config/environment/.env.template
+
+
 # Logs
 logs
 *.log
