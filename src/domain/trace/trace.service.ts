@@ -44,10 +44,30 @@ export class TraceService {
           if (!forward) continue;
           if (!row.nextTxid) continue;
           // if (visited.has(row.nextTxid)) continue;
+          // visit check
+          const isAlreadyVisited = await this.totalTransferRepository.findOneBy(
+            {
+              txid: row.nextTxid,
+            },
+          );
+          if (isAlreadyVisited) {
+            console.log('visited node: ', row.nextTxid);
+            continue;
+          }
           q.enqueue({ txid: row.nextTxid, depth: depth + 1 });
         } else if (row.toAddress === 'UTXO_TO') {
           if (forward) continue;
           // if (visited.has(row.prevTxid)) continue;
+          // visit check
+          const isAlreadyVisited = await this.totalTransferRepository.findOneBy(
+            {
+              txid: row.prevTxid,
+            },
+          );
+          if (isAlreadyVisited) {
+            console.log('visited node: ', row.prevTxid);
+            continue;
+          }
           q.enqueue({ txid: row.prevTxid, depth: depth + 1 });
         }
       }
