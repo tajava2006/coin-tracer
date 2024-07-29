@@ -92,7 +92,7 @@ $ curl -X GET "http://localhost:6789/trace?txid=415366ca40802cf7405d5262eb456941
 방향 : 
 forward = true 면 해당 토큰이 어디로 흘러가는지 추적
 forward = false 면 해당 토큰이 어디에서 흘러왔는지 추적
-해서 자동으로 total_transfer 테이블에 insert
+해서 자동으로 total_transfer 테이블에 insert. limit = 몇 depth 까지 추적할 것인지
 
 ## import neo4j 
 
@@ -120,6 +120,7 @@ forward = false 면 해당 토큰이 어디에서 흘러왔는지 추적
 4. open 버튼 옆 점 3개 클릭 -> Open folder 클릭 -> Import 클릭
 5. 4에서 열린 폴더에 해당 csv 파일 넣고
 6. neo4j start -> open
+7. 상단의 커맨드 창에 아래 커맨드 하나씩 실행 
    ```bash
         LOAD CSV WITH HEADERS FROM 'file:///total_transfer.csv' AS row
         // Process transactions
@@ -168,7 +169,15 @@ forward = false 면 해당 토큰이 어디에서 흘러왔는지 추적
         merge (address_to)-[prev_to_next:FLOW_IN {sequence: toString((toInteger(row.next_index)+1) * -1), amount: toInteger(row.amount), txid: row.next_txid}]->(next_tx)
 
    ```
-
+8. cypher, 혹은 gui 클릭을 통해 찾기(아래 예저 쿼리 참조)
+   ```bash
+   match (start:Address {address:"3MVyE86ef8nDmjCt3tEzgtKhtSSMNAYqJy"}), (end:Address {address:"bc1qne9zgv0n8fldjn934xvmff3cznjx426kgquvgf"})
+   match path = (start)-[*..7]-(end)
+   return path;
+   ```
+9. graph를 클릭하면 그래프 형태로 , table를 클릭하면 table 형태로 보여지고 해당 그래프에서 address나 tx 더블 클릭하면 관련된 노드들 전부 나오게 됨
+   
+   
 
 
 
