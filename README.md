@@ -1,30 +1,6 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="200" alt="Nest Logo" /></a>
-</p>
-
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
-
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://coveralls.io/github/nestjs/nest?branch=master" target="_blank"><img src="https://coveralls.io/repos/github/nestjs/nest/badge.svg?branch=master#9" alt="Coverage" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
-
 ## Description
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+코인원 utxo 계열 (현재까지는 btc 만 지원) 코인 자금 흐름 추적 프로그램
 
 ## Requirements
 1. node.js
@@ -92,6 +68,7 @@ create index ix_total_transfer_txid
 $ cd config/environment
 $ cp .env.template local.env
 ```
+이후 디비 정보(host, user, password, database) 채워넣고 아래 running the app 참고해서 실행하면 됩니다.
 
 ## Installation
 
@@ -107,17 +84,110 @@ $ NODE_ENV=local yarn run start
 
 ```
 
+## trace coin
+```bash
+$ curl -X GET "http://localhost:6789/trace?txid=415366ca40802cf7405d5262eb4569418532a75d773fd5044baeaa66b890490d&forward=false&limit=3"
+```
+추적시작 txid
+방향 : 
+forward = true 면 해당 토큰이 어디로 흘러가는지 추적
+forward = false 면 해당 토큰이 어디에서 흘러왔는지 추적
+해서 자동으로 total_transfer 테이블에 insert
 
-## Support
+## import neo4j 
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+1. 수집한 tx csv 파일로 export
+   ```bash
+        select
+            symbol
+            ,txid
+            ,sequence
+            ,from_address
+            ,prev_txid
+            ,prev_index
+            ,amount
+            ,to_address
+            ,next_txid
+            ,next_index
+            ,block_number
+            ,block_timestamp
+        from total_transfer
+        where 1=1
+        and to_address is not null;
+   ```
+2. neo4j 설치
+3. database 생성
+4. open 버튼 옆 점 3개 클릭 -> Open folder 클릭 -> Import 클릭
+5. 4에서 열린 폴더에 해당 csv 파일 넣고
+6. neo4j start -> open
+   ```bash
+        LOAD CSV WITH HEADERS FROM 'file:///total_transfer.csv' AS row
+        // Process transactions
+        WITH row
+        // Create Transaction nodes
+        MERGE (tx:Tx {txid: row.txid})
+        SET tx.block_number = toInteger(row.block_number)
+        
+        
+        LOAD CSV WITH HEADERS FROM 'file:///total_transfer.csv' AS row    
+        // Handle inputs
+        WITH row
+        WHERE row.to_address = 'UTXO_TO'
+        MERGE (address_from:Address {address: row.from_address})
+        MERGE (tx:Tx {txid: row.txid})
+        MERGE (address_from) -[flow_in:FLOW_IN {sequence: row.sequence, amount: toInteger(row.amount), txid: row.txid}] -> (tx)
+        
+        LOAD CSV WITH HEADERS FROM 'file:///total_transfer.csv' AS row
+        // Handle outputs
+        WITH row
+        WHERE row.from_address = 'UTXO_FROM'
+        MERGE (address_to:Address {address: row.to_address})
+        MERGE (tx:Tx {txid: row.txid})
+        MERGE (tx)-[flow_out:FLOW_OUT {sequence: toInteger(row.sequence), amount: toInteger(row.amount), txid: row.txid}]->(address_to)
+        
+        LOAD CSV WITH HEADERS FROM 'file:///total_transfer.csv' AS row
+        // Create relationships based on previous transaction
+        WITH row
+        WHERE row.prev_txid IS NOT NULL
+        MERGE (prev_tx:Tx {txid: row.prev_txid})
+        MERGE (address_to:Address {address: row.from_address})
+        with prev_tx, address_to, row
+        optional MATCH (prev_tx)-[existing_rel:FLOW_OUT {sequence: toInteger(row.prev_index), txid:row.prev_txid}]->(address_to)
+        delete existing_rel
+        merge (prev_tx)-[prev_to_next:FLOW_OUT {sequence: toInteger(row.prev_index), amout: toInteger(row.amount), txid: row.prev_txid}]->(address_to)
+        
+        LOAD CSV WITH HEADERS FROM 'file:///total_transfer.csv' AS row
+        // Create relationships based on next transaction
+        WITH row
+        WHERE row.next_txid IS NOT NULL
+        MERGE (next_tx:Tx {txid: row.next_txid})
+        MERGE (address_to:Address {address: row.to_address})
+        with next_tx, address_to, row
+        optional MATCH (address_to)-[existing_rel:FLOW_IN {sequence: toString((toInteger(row.next_index)+1) * -1), txid: row.next_txid}]->(next_tx)
+        delete existing_rel
+        merge (address_to)-[prev_to_next:FLOW_IN {sequence: toString((toInteger(row.next_index)+1) * -1), amount: toInteger(row.amount), txid: row.next_txid}]->(next_tx)
 
-## Stay in touch
+   ```
 
-- Author - [Kamil Myśliwiec](https://kamilmysliwiec.com)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
 
-## License
 
-Nest is [MIT licensed](LICENSE).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
