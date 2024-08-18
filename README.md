@@ -1,6 +1,6 @@
 ## Description
 
-코인원 utxo 계열 (현재까지는 btc 만 지원) 코인 자금 흐름 추적 프로그램
+가상자산 추적 대회 utxo 계열 (현재까지는 btc 만 지원) 코인 자금 흐름 추적 프로그램
 
 ## Requirements
 1. node.js
